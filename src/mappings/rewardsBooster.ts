@@ -358,6 +358,26 @@ export async function handleQueryRewardsSpent(
    *
    *  logger.warn(`No agreement or channel found`);
    */
+  if (
+    [
+      '0xf4f3d749211085151059407decc391f5c2c80eb445c195b991795be765026bde', // #25063139
+      '0x0cd7e2d27259ba2adebffe1f6be30e3efd8de5d0500c4b415070783f33d0e33e', // #25063604
+      '0xfd326ec458bf6ade44a1489931064fa211009f31036e031ddfce78328712b25d', // #25072915
+      '0x46b65fa661adb0ae9a27bf0c51c2feea22d59a4aff5a729a5d0be9e6f45eb476', // #25115977
+      '0x28738ebd68dd2971565cd010e1cf3e080a3b2d1730a9c46b222a4d23e8042b89', // #25162729
+      '0xb01ce6a43bef88d8cddbfa53d17eabc50d70b6ab3eca4ddcd4c121aa523031bc', // #25206117
+      '0xbe9c49dc7175276faa58a53aa18fe34d8e01b11684f385c987af5e75df81fcca', // #25249557
+      '0x2b42a54ba649b2882b86475d1949a4680e70228c0bf69f88c814165b6a954ff8', // #25304983
+      '0x7750da518c839b3348fcf95247668d42349ad03afaf14d6ab779099351cc9ad8', // #25351940
+      '0x464a5064af47fd97d472dc7cc766b2cd0cf1b0132ce49d20a6a0f5b13bba7bae', // #25395603
+      '0x90cbec609ccc00c88708324d29536b2a794572621803d685d71752a104c6d428', // #25438666
+    ].indexOf(event.transactionHash) !== -1
+  ) {
+    logger.warn(
+      `Skip handleQueryRewardsSpent for testnet at block ${event.blockNumber}`
+    );
+    return;
+  }
   assert(agreement || channel, 'No agreement or channel found');
 
   let orderType: OrderType = OrderType.UNKNOWN;

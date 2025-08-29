@@ -1160,11 +1160,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@subql/contract-sdk@portal:/Users/icez/workspace/src/_onfinality/network-contracts/build/build::locator=subquery-network-subql-project%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@subql/contract-sdk@portal:/Users/icez/workspace/src/_onfinality/network-contracts/build/build::locator=subquery-network-subql-project%40workspace%3A."
+"@subql/contract-sdk@npm:^1.10.0-1":
+  version: 1.10.0-1
+  resolution: "@subql/contract-sdk@npm:1.10.0-1"
+  checksum: 10c0/d12be84b8cfe39e406c2b8b3bea17af40200b93570a1d0f418b2427c914d9b6472729c0ca87843bc9c56c5f894cf924004b0f63cafe158f25f1e37771fdb66b0
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@subql/types-core@npm:2.0.2":
   version: 2.0.2
@@ -6912,7 +6913,7 @@ __metadata:
     "@ethersproject/abi": "npm:^5.7.0"
     "@subql/cli": "npm:^5.9.1"
     "@subql/common-ethereum": "npm:^4.9.3"
-    "@subql/contract-sdk": "npm:^1.9.0-1"
+    "@subql/contract-sdk": "npm:^1.10.0-1"
     "@subql/types-ethereum": "npm:^4.2.2"
     "@typechain/ethers-v5": "npm:^10.2.0"
     "@types/bs58": "npm:^4.0.1"
