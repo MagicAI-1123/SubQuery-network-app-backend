@@ -54,13 +54,28 @@ type Project @entity {
   owner: String!
   type: ProjectType!
   metadata: String! # IPFS hash
-  deploymentId: String! # IPFS hash
-  deploymentMetadata: String! # IPFS hash
+  """
+  IPFS hash pointing to deployment code version
+  """
+  deploymentId: String!
+  """
+  IPFS hash storing deployment description/metadata
+  """
+  deploymentMetadata: String!
   updatedTimestamp: Date!
   createdTimestamp: Date!
   totalReward: BigInt!
+  """
+  Consumer boost funds for this project's deployments
+  """
   totalBoost: BigInt!
+  """
+  Combined operator(indexer) + delegator allocation funds
+  """
   totalAllocation: BigInt!
+  """
+  Ratio of boost to total allocation with 18 decimal precision: (totalBoost * 10^18) / totalAllocation
+  """
   boostAllocationRatio: BigInt!
 
   deployments: [Deployment] @derivedFrom(field: "project")
@@ -72,10 +87,19 @@ type Project @entity {
 type Deployment @entity {
   id: ID! # deploymentId, IPFS hash to deployment
   metadata: String! # IPFS hash to metadata info
+  """
+  The parent project that this deployment belongs to - one project can have multiple deployment versions
+  """
   project: Project!
+  """
+  List of operators(indexers) that are running this specific deployment
+  """
   indexers: [IndexerDeployment]! @derivedFrom(field: "deployment")
   createdTimestamp: Date!
 
+  """
+  Service plans available for creating agreements on this deployment
+  """
   plans: [Plan]! @derivedFrom(field: "deployment")
 
   createdBlock: Int
@@ -87,7 +111,13 @@ type IndexerDeployment @entity {
   indexer: Indexer!
   deployment: Deployment!
 
+  """
+  Timestamp of the last status change - when operator called chain methods to update service status
+  """
   timestamp: Date
+  """
+  Current service status (READY/TERMINATED) - controlled by operator via on-chain method calls
+  """
   status: ServiceStatus!
 
   createdBlock: Int
@@ -96,11 +126,24 @@ type IndexerDeployment @entity {
 
 type Era @entity {
   id: ID! # Era id
-  startTime: Date! # Block timestamp the Era is started
-  endTime: Date # Block timestamp that the successive Era is started
-  forceNext: Boolean # True when force save previous Era
+  """
+  Block timestamp when this Era started - triggered by operator calling era advancement.
+  Most reward distributions are triggered after era transitions.
+  """
+  startTime: Date!
+  """
+  Block timestamp when this Era ended (when next Era started) - may be delayed beyond configured period
+  """
+  endTime: Date
+  """
+  True when this Era was force-created to fill missing previous Era data
+  """
+  forceNext: Boolean
   createdBlock: Int
   lastEvent: String #topicHandler:blockNumber
+  """
+  Era period duration in milliseconds - derived from on-chain eraPeriod configuration (seconds * 1000)
+  """
   eraPeriod: String
 }
 
@@ -108,19 +151,36 @@ type Era @entity {
 """
 AI/LLM Warning: Do not use this JSONBigInt field for filtering or queries.
 Use the flattened BigInt field instead (e.g., maxUnstakeAmountValue)
+This is a legacy workaround from old SDK bugs - flattened fields are preferred for easier AI analysis.
 """
 type JSONBigInt @jsonField {
-  type: String! # Always "bigint",
-  value: String! # Hex encoded string
+  """
+  Always "bigint" - type identifier for the JSON field
+  """
+  type: String!
+  """
+  Hex encoded string representation of the BigInt value
+  """
+  value: String!
 }
 
 """
 AI/LLM Warning: Do not use this EraValue field for filtering or queries.
 Use the flattened fields instead (e.g., commissionEra, commissionEraValueAt, commissionEraValueAfter)
+This is a legacy workaround for tracking value changes across eras - flattened fields are preferred for easier AI analysis.
 """
 type EraValue @jsonField {
+  """
+  Era number when this value change occurred
+  """
   era: Int!
+  """
+  Value before the change in the specified era
+  """
   value: JSONBigInt!
+  """
+  Value after the change in the specified era
+  """
   valueAfter: JSONBigInt!
 
   createdBlock: Int
@@ -158,11 +218,11 @@ type Indexer @entity {
   """
   totalStakeEra: Int!
   """
-  Total stake value before the change in totalStakeEra
+  Total stake value before the change in totalStakeEra (selfStake + all delegations)
   """
   totalStakeEraValue: BigInt!
   """
-  Total stake value after the change in totalStakeEra
+  Total stake value after the change in totalStakeEra (selfStake + all delegations)
   """
   totalStakeEraValueAfter: BigInt!
   """
@@ -192,11 +252,13 @@ type Indexer @entity {
   """
   capacityEra: Int!
   """
-  Capacity value before the change in capacityEra
+  Capacity value before the change in capacityEra.
+  Capacity = selfStake * leverageLimit - totalStake (remaining delegation capacity)
   """
   capacityEraValue: BigInt!
   """
-  Capacity value after the change in capacityEra
+  Capacity value after the change in capacityEra.
+  Capacity = selfStake * leverageLimit - totalStake (remaining delegation capacity)
   """
   capacityEraValueAfter: BigInt!
   """
@@ -213,7 +275,13 @@ type Indexer @entity {
   delegations: [Delegation] @derivedFrom(field: "indexer")
   rewards: [IndexerReward] @derivedFrom(field: "indexer")
 
+  """
+  Era when this indexer last claimed rewards
+  """
   lastClaimEra: String
+  """
+  Era when this indexer's rewards were last settled/calculated
+  """
   lastSettledEra: String
   active: Boolean! # @index
   createdBlock: Int
