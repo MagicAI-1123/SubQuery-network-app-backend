@@ -388,9 +388,6 @@ type Indexer @entity {
   """
   active: Boolean! @index
   """
-  Block number when indexer was created
-  """
-  """
   Block number when record was created
   """
   createdBlock: Int
@@ -1295,10 +1292,6 @@ type Offer @entity {
   Penalty amount deducted on withdrawal
   """
   withdrawPenalty: BigInt
-
-  """
-  Block number when offer was created
-  """
   """
   Block number when record was created
   """
@@ -1331,10 +1324,6 @@ type AcceptedOffer @entity {
   Service agreement created from this acceptance
   """
   serviceAgreement: ServiceAgreement!
-
-  """
-  Block number when offer was accepted
-  """
   """
   Block number when record was created
   """
@@ -1387,10 +1376,6 @@ type TotalLock @entity {
   Current total stake amount (use if currentEra > totalStakeEra)
   """
   totalStakeEraValueAfter: BigInt!
-
-  """
-  Block number when entity was created
-  """
   """
   Block number when record was created
   """
@@ -2803,10 +2788,6 @@ type ProjectVoteActivity @entity {
   Transaction hash containing the activity
   """
   transactionHash: String!
-
-  """
-  Block number when activity was created
-  """
   """
   Block number when record was created
   """
