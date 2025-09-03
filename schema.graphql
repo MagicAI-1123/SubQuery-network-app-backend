@@ -48,22 +48,48 @@ enum DisputeState {
   CANCELLED
 }
 
+"""
+Project entity represents SubQuery projects in the network.
+Supports 5-round reward distribution: by project type -> consumer boost allocation -> operator+delegator -> commission -> stake-proportional distribution.
+Each project can have multiple deployment versions and dynamic type weighting configuration.
+"""
 type Project @entity {
+  """
+  Project unique identifier
+  """
   id: ID!
 
+  """
+  Project owner wallet address
+  """
   owner: String!
+  """
+  Project type classification
+  """
   type: ProjectType!
-  metadata: String! # IPFS hash
+  """
+  Project metadata IPFS hash
+  """
+  metadata: String!
   """
   IPFS hash pointing to deployment code version
   """
   deploymentId: String!
   """
-  IPFS hash storing deployment description/metadata
+  IPFS hash pointing to deployment metadata
   """
   deploymentMetadata: String!
+  """
+  When project was last updated
+  """
   updatedTimestamp: Date!
+  """
+  When project was created
+  """
   createdTimestamp: Date!
+  """
+  Total rewards earned by this project
+  """
   totalReward: BigInt!
   """
   Consumer boost funds for this project's deployments
@@ -80,13 +106,29 @@ type Project @entity {
 
   deployments: [Deployment] @derivedFrom(field: "project")
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Deployment entity represents versions of a project's code deployment.
+A single project can have multiple deployments (versions), with Plans for creating agreements and IndexerDeployment records for operators running it.
+"""
 type Deployment @entity {
-  id: ID! # deploymentId, IPFS hash to deployment
-  metadata: String! # IPFS hash to metadata info
+  """
+  Deployment identifier (IPFS hash to deployment)
+  """
+  id: ID!
+  """
+  Deployment metadata IPFS hash
+  """
+  metadata: String!
   """
   The parent project that this deployment belongs to - one project can have multiple deployment versions
   """
@@ -95,6 +137,9 @@ type Deployment @entity {
   List of operators(indexers) that are running this specific deployment
   """
   indexers: [IndexerDeployment]! @derivedFrom(field: "deployment")
+  """
+  When deployment was created
+  """
   createdTimestamp: Date!
 
   """
@@ -102,12 +147,26 @@ type Deployment @entity {
   """
   plans: [Plan]! @derivedFrom(field: "deployment")
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+IndexerDeployment tracks which operators (indexers) are running specific deployments.
+One operator can serve multiple deployments, and one deployment can be served by multiple operators.
+Status changes are controlled by operator calling chain methods.
+"""
 type IndexerDeployment @entity {
-  id: ID! # indexer address + deployment id
+  """
+  Composite ID: indexer address + deployment id
+  """
+  id: ID!
   indexer: Indexer!
   deployment: Deployment!
 
@@ -120,12 +179,27 @@ type IndexerDeployment @entity {
   """
   status: ServiceStatus!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Era represents time periods for reward distribution cycles in the network.
+Era duration is operator-triggered with minimum seconds configuration, may have delays.
+Most reward distributions are triggered after era transitions. 
+eraPeriod stores duration in milliseconds format (seconds * 1000).
+"""
 type Era @entity {
-  id: ID! # Era id
+  """
+  Era identifier
+  """
+  id: ID!
   """
   Block timestamp when this Era started - triggered by operator calling era advancement.
   Most reward distributions are triggered after era transitions.
@@ -139,15 +213,20 @@ type Era @entity {
   True when this Era was force-created to fill missing previous Era data
   """
   forceNext: Boolean
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
   """
   Era period duration in milliseconds - derived from on-chain eraPeriod configuration (seconds * 1000)
   """
   eraPeriod: String
 }
 
-# Necessary without https://github.com/subquery/subql/issues/442
 """
 AI/LLM Warning: Do not use this JSONBigInt field for filtering or queries.
 Use the flattened BigInt field instead (e.g., maxUnstakeAmountValue)
@@ -183,14 +262,35 @@ type EraValue @jsonField {
   """
   valueAfter: JSONBigInt!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Indexer entity represents network operators who run deployments and earn rewards.
+Contains both EraValue and flattened fields - use flattened fields for easier querying.
+Capacity = selfStake * leverageLimit - totalStake (remaining delegation capacity).
+Current value rule: use xxxEraValueAfter if currentEra > xxxEra, otherwise use xxxEraValue.
+"""
 type Indexer @entity {
-  id: ID! # Indexers address
-  metadata: String! # IPFS cid
-  controller: String # Controller address for the indexer
+  """
+  Indexer wallet address
+  """
+  id: ID!
+  """
+  Indexer metadata IPFS CID
+  """
+  metadata: String!
+  """
+  Controller address for the indexer (proxy for chain operations)
+  """
+  controller: String
   """
   AI/LLM Warning: Do not use this field for filtering or queries. Use commissionEra, commissionEraValue, commissionEraValueAfter instead
   """
@@ -283,31 +383,84 @@ type Indexer @entity {
   Era when this indexer's rewards were last settled/calculated
   """
   lastSettledEra: String
-  active: Boolean! # @index
+  """
+  Whether the indexer is currently active
+  """
+  active: Boolean! @index
+  """
+  Block number when indexer was created
+  """
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Historical commission rate records for indexers across different eras.
+When commission rate changes, creates records for current era + next 2 eras.
+New rate takes effect from era+2, providing 2-era buffer period for delegators.
+"""
 type IndexerCommissionRate @entity {
-  id: ID! # indexer address + era id
+  """
+  Composite ID: indexer address + era id (hex format)
+  """
+  id: ID!
   indexer: Indexer!
   era: Era!
+  """
+  Era number for easier calculation and comparison
+  """
   eraIdx: Int!
+  """
+  Commission rate converted from indexer.commission BigInt to Number
+  """
   commissionRate: Int!
 }
 
+"""
+Controller entity represents proxy addresses that execute on-chain operations for indexers.
+Each indexer can have only one active controller at a time, but can switch controllers.
+Historical controller records are preserved with isActive flag indicating current status.
+"""
 type Controller @entity {
-  id: ID! # indexer Address + controller Address
+  """
+  Composite ID: indexer address + controller address
+  """
+  id: ID!
+  """
+  Controller proxy address that executes chain operations
+  """
   controller: String!
   indexer: Indexer!
-
-  isActive: Boolean! # Controller currently set to this indexer
+  """
+  Whether this controller is currently active for the indexer (only one can be active at a time)
+  """
+  isActive: Boolean!
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Delegator entity represents users who delegate tokens to indexers to earn rewards.
+Tracks total delegations across all indexers with era-based value changes.
+exitEra is set only when completely exiting (totalDelegations <= 0), otherwise remains -1.
+"""
 type Delegator @entity {
-  id: ID! # Address
+  """
+  Delegator wallet address
+  """
+  id: ID!
   """
   AI/LLM Warning: Do not use this field for filtering or queries. Use totalDelegationsEra, totalDelegationsEraValue, totalDelegationsEraValueAfter instead
   """
@@ -318,18 +471,37 @@ type Delegator @entity {
   delegations: [Delegation] @derivedFrom(field: "delegator")
   claimedRewards: [Reward] @derivedFrom(field: "delegator")
   unclaimedRewards: [UnclaimedReward] @derivedFrom(field: "delegator")
+  """
+  Era when first started delegating (or re-entered after complete exit)
+  """
   startEra: Int!
+  """
+  Era when completely exited all delegations. -1 means still actively delegating
+  """
   exitEra: Int!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Delegation entity represents a specific delegation relationship between a delegator and an indexer.
+Each delegator can have multiple delegations to different indexers.
+exitEra is set only when completely exiting this specific delegation, partial withdrawals just update amount.
+"""
 type Delegation @entity {
-  id: ID! # nominator + indexer addresses
+  """
+  Composite ID: delegator address + indexer address
+  """
+  id: ID!
   delegator: Delegator!
   indexer: Indexer!
-
   """
   AI/LLM Warning: Do not use this field for filtering or queries. Use amountEra, amountEraValue, amountEraValueAfter instead
   """
@@ -337,32 +509,71 @@ type Delegation @entity {
   amountEra: Int!
   amountEraValue: BigInt!
   amountEraValueAfter: BigInt!
+  """
+  Era when this specific delegation to the indexer was completely exited. undefined/null means still active
+  """
   exitEra: Int
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
 """
 AI/LLM Warning: Do not use this DelegationFrom field for filtering or queries.
 Use the flattened fields instead (e.g., delegatorAddresses, delegatorAmounts)
+
+DelegationFrom represents delegator information in era-based snapshots.
+Used in EraIndexerDelegator entity to store all delegators for a specific indexer in a specific era.
+Legacy JSON field type - flattened arrays are preferred for easier AI analysis.
 """
 type DelegationFrom @jsonField {
+  """
+  Delegator wallet address
+  """
   delegator: String!
+  """
+  Delegation amount from this delegator
+  """
   amount: BigInt!
 }
 
 """
 AI/LLM Warning: Do not use this DelegationTo field for filtering or queries.
 Use the flattened fields instead (e.g., indexerAddresses, indexerAmounts)
+
+DelegationTo represents indexer information from delegator's perspective in era-based snapshots.
+Used in EraDelegatorIndexer entity to store all indexers a specific delegator delegates to in a specific era.
+Symmetric counterpart to DelegationFrom - provides delegator->indexer view while DelegationFrom provides indexer->delegator view.
+Legacy JSON field type - flattened arrays are preferred for easier AI analysis.
 """
 type DelegationTo @jsonField {
+  """
+  Target indexer address receiving the delegation
+  """
   indexer: String!
+  """
+  Delegation amount to this indexer
+  """
   amount: BigInt!
 }
 
+"""
+EraIndexerDelegator provides era-based snapshots of delegator distribution for each indexer.
+Uses dual ID system: 'indexer' for latest live data, 'indexer:era' for historical snapshots.
+Real-time updates to latest record, batch creation of historical records via fillUpEraIndexerDelegator.
+totalStake = sum of all delegatorAmounts + selfStake.
+"""
 type EraIndexerDelegator @entity {
-  id: ID! # indexer! + era! or indexer! for latest data
+  """
+  Dual ID format: 'indexer_address' (latest data) or 'indexer_address:era_hex' (historical data)
+  """
+  id: ID!
   indexer: String!
   era: Int!
   """
@@ -371,12 +582,27 @@ type EraIndexerDelegator @entity {
   delegators: [DelegationFrom!]!
   delegatorAddresses: [String!]!
   delegatorAmounts: [BigInt!]!
+  """
+  Total stake amount: sum of all delegation amounts plus self stake
+  """
   totalStake: BigInt!
+  """
+  Self stake amount by the indexer
+  """
   selfStake: BigInt!
 }
 
+"""
+EraDelegatorIndexer provides era-based snapshots of indexer targets from each delegator's perspective.
+Symmetric counterpart to EraIndexerDelegator - shows which indexers a delegator delegates to.
+Uses same dual ID system: 'delegator' for latest live data, 'delegator:era' for historical snapshots.
+Real-time updates to latest record, batch creation of historical records via fillUpEraDelegatorIndexer.
+"""
 type EraDelegatorIndexer @entity {
-  id: ID! # delegator! + era! or delegator! for latest data
+  """
+  Dual ID format: 'delegator_address' (latest data) or 'delegator_address:era_hex' (historical data)
+  """
+  id: ID!
   delegator: String!
   era: Int!
   """
@@ -385,293 +611,961 @@ type EraDelegatorIndexer @entity {
   indexers: [DelegationTo!]!
   indexerAddresses: [String!]!
   indexerAmounts: [BigInt!]!
+  """
+  Total stake amount: sum of all delegation amounts by this delegator
+  """
   totalStake: BigInt!
+  """
+  Self stake amount if this delegator is also an indexer, otherwise 0
+  """
   selfStake: BigInt!
 }
 
+"""
+Withdrawl represents withdrawal/unstaking operations in the network.
+Note: Entity name has intentional spelling (Withdrawl vs Withdrawal) - cannot be changed.
+Supports different withdrawal types: undelegation, unstaking, commission claims, and merge operations.
+Status progresses from ONGOING to either CLAIMED or CANCELLED.
+"""
 type Withdrawl @entity {
-  id: ID! # nominator + index
-  index: BigInt! # Index of the withdrawl
-  delegator: String! @index # nominator address
-  indexer: String! # nominator address
+  """
+  Composite ID: delegator_address:index_hex
+  """
+  id: ID!
+  """
+  Sequential index for this delegator's withdrawal operations
+  """
+  index: BigInt!
+  """
+  Delegator (nominator) address initiating the withdrawal
+  """
+  delegator: String! @index
+  """
+  Target indexer address for the withdrawal operation
+  """
+  indexer: String!
+  """
+  Timestamp when withdrawal was initiated
+  """
   startTime: Date!
+  """
+  Amount being withdrawn
+  """
   amount: BigInt!
+  """
+  Type of withdrawal: UNDELEGATION, UNSTAKE, COMMISSION, or MERGE
+  """
   type: WithdrawalType!
-
+  """
+  Current status: ONGOING, CLAIMED, or CANCELLED
+  """
   status: WithdrawalStatus!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+ConsumerController represents proxy addresses that execute on-chain operations for consumers.
+Similar to indexer controllers, consumers can delegate operational control to controller addresses.
+Provides consumer-side proxy management mechanism for chain interactions.
+"""
 type ConsumerController @entity {
-  id: ID! # <consumer_address>_<controller_address>
+  """
+  Composite ID: consumer_address_controller_address
+  """
+  id: ID!
+  """
+  Controller proxy address that executes chain operations for the consumer
+  """
   controller: String! @index
+  """
+  Consumer address that delegates control to the controller
+  """
   consumer: String! @index
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+PlanTemplate represents service plan templates that define pricing and service limits.
+Templates are used to create specific Plan instances with custom pricing.
+Supports billing periods, request quotas, rate limiting, and multi-token payments.
+Templates can be activated/deactivated and have updatable metadata stored on IPFS.
+"""
 type PlanTemplate @entity {
-  id: ID! # Index, hex encoded
+  """
+  Template index in hex format
+  """
+  id: ID!
+  """
+  Billing period duration (units defined in contract)
+  """
   period: BigInt!
+  """
+  Daily request quota limit
+  """
   dailyReqCap: BigInt!
+  """
+  Request rate limit (requests per time unit)
+  """
   rateLimit: BigInt!
+  """
+  Payment token contract address
+  """
   priceToken: String!
+  """
+  IPFS CID containing additional service description and metadata
+  """
   metadata: String
+  """
+  Whether this template is currently active and available for use
+  """
   active: Boolean!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Plan represents specific service plan instances created from PlanTemplate.
+Inherits service limits (period, quotas, rate limits) from template but has custom pricing.
+Can be optionally bound to specific deployments to provide targeted services.
+Used as basis for creating ServiceAgreements between indexers and consumers.
+"""
 type Plan @entity {
-  id: ID! # Index, hex encoded
+  """
+  Plan index in hex format
+  """
+  id: ID!
+  """
+  Custom price for this plan instance
+  """
   price: BigInt!
-  creator: String! @index # Address
+  """
+  Address of the plan creator (typically indexer)
+  """
+  creator: String! @index
+  """
+  Template that defines service limits and payment token
+  """
   planTemplate: PlanTemplate!
+  """
+  Whether this plan is currently active and available
+  """
   active: Boolean!
-
+  """
+  Optional deployment this plan is specifically bound to
+  """
   deployment: Deployment
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+ServiceAgreement represents service contracts between indexers and consumers.
+Created when a closed service agreement is established on-chain, defining service terms,
+duration, and payment amounts. Each agreement is an NFT-like token that can be transferred.
+"""
 type ServiceAgreement @entity {
-  id: ID! # contract address
+  """
+  Service agreement token ID from the contract
+  """
+  id: ID!
+  """
+  Indexer providing the service
+  """
   indexerAddress: String! @index
+  """
+  Consumer purchasing the service (can be transferred)
+  """
   consumerAddress: String! @index
+  """
+  Deployment being served by this agreement
+  """
   deployment: Deployment!
+  """
+  Template defining service limits and payment token (not Plan instance)
+  """
   planTemplate: PlanTemplate!
-
+  """
+  Service duration in seconds
+  """
   period: BigInt!
+  """
+  Agreement start timestamp
+  """
   startTime: Date!
+  """
+  Agreement end timestamp (calculated from startTime + period)
+  """
   endTime: Date! @index
+  """
+  Total amount locked/paid for this service agreement
+  """
   lockedAmount: BigInt!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+UnclaimedReward tracks accumulated unclaimed rewards for delegator-indexer pairs.
+Rewards accumulate over time through era distributions and are removed when claimed,
+creating a corresponding Reward record for the claimed amount.
+"""
 type UnclaimedReward @entity {
-  id: ID! # indexer + delegator
+  """
+  Composite ID: indexer_address:delegator_address
+  """
+  id: ID!
+  """
+  Indexer address earning rewards
+  """
   indexerAddress: String!
+  """
+  Delegator address with unclaimed rewards
+  """
   delegatorAddress: String! @index
+  """
+  Reference to the delegator entity
+  """
   delegator: Delegator
-
+  """
+  Total accumulated unclaimed reward amount (cumulative)
+  """
   amount: BigInt!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Reward represents historical records of claimed rewards.
+Created when users claim their accumulated rewards from UnclaimedReward entities.
+Each record is immutable and tracks the specific claim transaction details.
+"""
 type Reward @entity {
-  id: ID! # indexer + delegator + tx hash
+  """
+  Composite ID: indexer:delegator:transaction_hash:log_index
+  """
+  id: ID!
+  """
+  Indexer address that earned the rewards
+  """
   indexerAddress: String!
+  """
+  Delegator address that claimed the rewards
+  """
   delegatorAddress: String! @index
+  """
+  Reference to the delegator entity
+  """
   delegator: Delegator
-
+  """
+  Amount of rewards claimed in this transaction
+  """
   amount: BigInt!
+  """
+  Timestamp when the rewards were claimed
+  """
   claimedTime: Date!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
-# Expected total reward an indexer will get each epoch
+"""
+IndexerReward tracks the total accumulated rewards for each indexer per era.
+Records are created or updated when various reward events occur (instant rewards, agreement rewards, etc.).
+Amount field accumulates all rewards an indexer receives during a specific era.
+"""
 type IndexerReward @entity {
-  id: ID! # indexer + era
+  """
+  Composite ID: indexer_address:era_hex
+  """
+  id: ID!
+  """
+  Reference to the indexer earning rewards
+  """
   indexer: Indexer!
-
-  # era: Era
-  eraIdx: String! #TODO: depreciate
+  """
+  Era index in string format (deprecated, use eraId instead)
+  """
+  eraIdx: String!
+  """
+  Era index in BigInt format
+  """
   eraId: BigInt!
-
+  """
+  Total accumulated reward amount for this indexer in this era
+  """
   amount: BigInt!
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+EraReward tracks detailed reward records for each indexer-delegator pair per era.
+Records both regular delegation rewards and commission rewards for indexers.
+Provides granular reward tracking that feeds into APY calculations and claim management.
+"""
 type EraReward @entity {
-  id: ID! # indexer! + delegator! + era! + commission?
+  """
+  Composite ID: indexer:delegator:era[_commission]
+  Appends '_commission' suffix for commission reward records
+  """
+  id: ID!
+  """
+  Indexer earning or distributing the rewards
+  """
   indexer: Indexer!
+  """
+  Delegator receiving the rewards (same as indexer for commission)
+  """
   delegator: Delegator!
+  """
+  Era when this reward was distributed
+  """
   era: Era!
+  """
+  Era index as integer
+  """
   eraIdx: Int!
-
+  """
+  True if this is a self-stake reward (indexerId === delegatorId)
+  """
   isIndexer: Boolean!
+  """
+  True if this represents commission earnings for indexer
+  """
   isCommission: Boolean!
-
+  """
+  Reward amount for this specific indexer-delegator-era combination
+  """
   amount: BigInt!
+  """
+  Whether this reward has been claimed (commission rewards are auto-claimed)
+  """
   claimed: Boolean!
 
   createdBlock: Int
   createdTimestamp: Date!
 }
 
+"""
+EraRewardClaimed tracks reward claiming progress for each indexer-delegator pair.
+Maintains the last successfully claimed era to optimize future claim operations
+by avoiding repeated scanning of already processed eras.
+"""
 type EraRewardClaimed @entity {
-  id: ID! # indexer + delegator
+  """
+  Composite ID: indexer_address:delegator_address
+  """
+  id: ID!
+  """
+  Last era number for which rewards were successfully claimed
+  Used as starting point for next claim operation (lastClaimedEra + 1)
+  """
   lastClaimedEra: Int!
 }
 
+"""
+IndexerStakeSummary provides aggregated staking data for individual indexers and global totals.
+Maintains both current era and next era stake amounts since stake changes typically take effect
+in the following era. ID '0x00' represents global aggregation across all indexers.
+"""
 type IndexerStakeSummary @entity {
-  id: ID! # indexer address or 0x00 for global
+  """
+  Indexer address for individual summary, or '0x00' for global aggregation
+  """
+  id: ID!
+  """
+  Era this summary is associated with
+  """
   era: Era!
+  """
+  Era index as integer
+  """
   eraIdx: Int!
+  """
+  Total stake amount for current era (indexerStake + delegatorStake)
+  """
   totalStake: BigInt!
+  """
+  Self-stake amount by indexer for current era
+  """
   indexerStake: BigInt!
+  """
+  Total delegated stake amount for current era
+  """
   delegatorStake: BigInt!
+  """
+  Total stake amount for next era (pending changes)
+  """
   nextTotalStake: BigInt!
+  """
+  Self-stake amount by indexer for next era (pending changes)
+  """
   nextIndexerStake: BigInt!
+  """
+  Total delegated stake amount for next era (pending changes)
+  """
   nextDelegatorStake: BigInt!
 }
 
+"""
+IndexerStake provides immutable historical snapshots of staking data per indexer per era.
+Created from IndexerStakeSummary data when stake changes occur. Maintains separate records
+for individual indexers and global aggregations across all indexers.
+"""
 type IndexerStake @entity {
-  id: ID! # indexer address + era id or era id for all indexers
+  """
+  Individual indexer: indexer_address:era_id, Global aggregation: era_id (with indexerId='0x00')
+  """
+  id: ID!
+  """
+  Reference to the indexer (or null for global aggregation records)
+  """
   indexer: Indexer!
+  """
+  Era this stake snapshot represents
+  """
   era: Era!
+  """
+  Era index as integer
+  """
   eraIdx: Int!
+  """
+  Total stake amount for this era (indexerStake + delegatorStake)
+  """
   totalStake: BigInt!
+  """
+  Self-stake amount by indexer for this era
+  """
   indexerStake: BigInt!
+  """
+  Total delegated stake amount for this era
+  """
   delegatorStake: BigInt!
 }
 
+"""
+EraStake tracks granular stake amounts for each delegator-indexer pair per era.
+Provides the most detailed historical staking data, showing exactly how much
+each delegator has staked to each indexer in every era. Used as foundation
+for precise reward calculations and stake analytics.
+"""
 type EraStake @entity {
-  id: ID! # indexer address + delegator address + era id
+  """
+  Composite ID: indexer_address:delegator_address:era_id
+  """
+  id: ID!
+  """
+  Indexer receiving the stake
+  """
   indexer: Indexer!
+  """
+  Delegator providing the stake
+  """
   delegator: Delegator!
+  """
+  Era this stake amount applies to
+  """
   era: Era!
+  """
+  Era index as integer
+  """
   eraIdx: Int!
+  """
+  Stake amount from this delegator to this indexer in this era
+  """
   stake: BigInt!
 }
 
+"""
+EraStakeUpdate serves as an optimization index for EraStake creation.
+Tracks the last era when each delegator-indexer pair had a stake update,
+enabling efficient retrieval of baseline stake amounts without scanning
+multiple historical eras.
+"""
 type EraStakeUpdate @entity {
-  id: ID! # indexer address + delegator address
+  """
+  Composite ID: indexer_address:delegator_address
+  """
+  id: ID!
+  """
+  Last era when this delegator-indexer pair had a stake update
+  Used to quickly locate the most recent EraStake record for baseline calculation
+  """
   lastUpdateEra: Era!
 }
 
+"""
+Sqtoken tracks SQT token supply statistics and holder relationships.
+Maintains both total supply (all minted tokens) and circulating supply 
+(excluding tokens held by reserved contracts like treasury and airdropper).
+Updated in real-time through L2SQToken Transfer event monitoring.
+"""
 type Sqtoken @entity {
-  id: ID! # token address
-  totalSupply: BigInt! # total supply
-  circulatingSupply: BigInt! # totalSupply - airdrop locked - staking locked - treasury holdings
+  """
+  Token contract address
+  """
+  id: ID!
+  """
+  Total token supply (increased by mint, decreased by burn)
+  """
+  totalSupply: BigInt!
+  """
+  Circulating supply excluding reserved contract holdings (treasury, airdropper)
+  Calculated by tracking transfers in/out of reserved addresses
+  """
+  circulatingSupply: BigInt!
+  """
+  All token holders for this token
+  """
   tokenHolders: [TokenHolder] @derivedFrom(field: "token")
 }
 
+"""
+TokenHolder tracks individual SQT token holder balances.
+Updated in real-time through L2SQToken Transfer event processing.
+Automatically created when first receiving tokens, balance updated on transfers.
+Skips zero address (mint/burn operations) as these are not actual holders.
+"""
 type TokenHolder @entity {
-  id: ID! # holder address
+  """
+  Token holder wallet address
+  """
+  id: ID!
+  """
+  Current token balance for this holder
+  Updated on every transfer in/out
+  """
   balance: BigInt!
+  """
+  Reference to the SQT token contract
+  """
   token: Sqtoken!
 }
 
+"""
+Transfer records all SQT token transfer events from L2SQToken contract.
+Captures complete transfer details for audit trail and balance tracking.
+Used to maintain TokenHolder balances and Sqtoken supply statistics.
+"""
 type Transfer @entity {
-  id: ID! # tx hash+eventidx
+  """
+  Unique identifier: transaction hash + log index
+  """
+  id: ID!
+  """
+  Amount of tokens transferred
+  """
   amount: BigInt!
+  """
+  Sender address (zero address for minting)
+  """
   from: String!
+  """
+  Recipient address (zero address for burning)
+  """
   to: String!
+  """
+  Transaction hash containing this transfer
+  """
   txHash: String!
+  """
+  Block timestamp when transfer occurred
+  """
   timestamp: Date!
+  """
+  Block number containing this transfer
+  """
   blockheight: BigInt!
 }
 
+"""
+Offer represents a consumer's request for indexing services with specific requirements.
+Consumers create offers specifying deployment, pricing, and indexer requirements.
+Indexers can accept offers to establish service agreements.
+Tracks acceptance progress and withdrawal status.
+"""
 type Offer @entity {
-  id: ID! # offerID
+  """
+  Unique offer identifier
+  """
+  id: ID!
+  """
+  Consumer wallet address creating this offer
+  """
   consumer: String! @index
+  """
+  Deployment being offered for indexing
+  """
   deployment: Deployment!
+  """
+  Pricing template defining service terms
+  """
   planTemplate: PlanTemplate!
+  """
+  Security deposit amount locked by consumer
+  """
   deposit: BigInt!
+  """
+  Minimum block height for indexer acceptance
+  """
   minimumAcceptHeight: BigInt!
+  """
+  Minimum stake amount required from accepting indexers
+  """
   minimumStakingAmount: BigInt!
+  """
+  Offer expiration date
+  """
   expireDate: Date! @index
-  limit: Int! # indexer cap
-  accepted: Int! # accepted indexer amount
+  """
+  Maximum number of indexers allowed to accept
+  """
+  limit: Int!
+  """
+  Current number of indexers who have accepted
+  """
+  accepted: Int!
+  """
+  Whether the indexer limit has been reached
+  """
   reachLimit: Boolean!
-  withdrawn: Boolean! # withdraw by cancel event
+  """
+  Whether deposit has been withdrawn (via cancel event)
+  """
+  withdrawn: Boolean!
+  """
+  Penalty amount deducted on withdrawal
+  """
   withdrawPenalty: BigInt
 
+  """
+  Block number when offer was created
+  """
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+AcceptedOffer links indexers to the specific offers they have accepted.
+Created when an indexer accepts a consumer's offer, establishing the relationship
+between indexer, offer, and the resulting service agreement.
+"""
 type AcceptedOffer @entity {
-  id: ID! # offerID:indexer
+  """
+  Composite ID: offerID:indexer
+  """
+  id: ID!
+  """
+  Indexer who accepted this offer
+  """
   indexer: Indexer!
+  """
+  The offer that was accepted
+  """
   offer: Offer!
+  """
+  Service agreement created from this acceptance
+  """
   serviceAgreement: ServiceAgreement!
 
+  """
+  Block number when offer was accepted
+  """
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+TotalLock tracks network-wide aggregated delegation and stake amounts.
+Maintains era-based snapshots of total locked tokens across all indexers.
+Uses flattened era fields for efficient AI/LLM analysis and queries.
+"""
 type TotalLock @entity {
-  id: ID! # TotalLock
+  """
+  Fixed identifier: 'TotalLock'
+  """
+  id: ID!
   """
   AI/LLM Warning: Do not use this field for filtering or queries. Use totalDelegationEra, totalDelegationEraValue, totalDelegationEraValueAfter instead
   """
   totalDelegation: EraValue!
+  """
+  Era when total delegation amount was last updated
+  """
   totalDelegationEra: Int!
+  """
+  Total delegation amount at totalDelegationEra
+  """
   totalDelegationEraValue: BigInt!
+  """
+  Current total delegation amount (use if currentEra > totalDelegationEra)
+  """
   totalDelegationEraValueAfter: BigInt!
   """
   AI/LLM Warning: Do not use this field for filtering or queries. Use totalStakeEra, totalStakeEraValue, totalStakeEraValueAfter instead
   """
   totalStake: EraValue!
+  """
+  Era when total stake amount was last updated
+  """
   totalStakeEra: Int!
+  """
+  Total stake amount at totalStakeEra
+  """
   totalStakeEraValue: BigInt!
+  """
+  Current total stake amount (use if currentEra > totalStakeEra)
+  """
   totalStakeEraValueAfter: BigInt!
 
+  """
+  Block number when entity was created
+  """
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Exception records errors that occur during event processing.
+Captures handler failures for debugging and monitoring purposes.
+Used to track and analyze system reliability issues.
+"""
 type Exception @entity {
-  id: ID! #eventBlock:txhash
+  """
+  Unique identifier: eventBlock:txhash
+  """
+  id: ID!
+  """
+  Name of the event handler that failed
+  """
   handler: String!
+  """
+  Error message describing the failure
+  """
   error: String!
 }
 
+"""
+StateChannel represents payment channels between consumers and indexers.
+Manages off-chain payment flow for query services with on-chain settlement.
+Tracks channel lifecycle, spending, and termination conditions.
+"""
 type StateChannel @entity {
+  """
+  Unique state channel identifier
+  """
   id: ID!
 
+  """
+  Indexer address providing the service
+  """
   indexer: String! @index
+  """
+  Consumer address using the service
+  """
   consumer: String! @index
+  """
+  Optional agent address managing the channel
+  """
   agent: String
+  """
+  Current channel status
+  """
   status: ChannelStatus!
+  """
+  Deployment being served through this channel
+  """
   deployment: Deployment!
+  """
+  Real total amount allocated to this channel
+  """
   realTotal: BigInt!
+  """
+  Total amount available in the channel
+  """
   total: BigInt!
+  """
+  Price per query unit
+  """
   price: BigInt!
+  """
+  Amount already spent from the channel
+  """
   spent: BigInt!
+  """
+  Whether the channel is in final state
+  """
   isFinal: Boolean!
+  """
+  Channel expiration date
+  """
   expiredAt: Date! @index
+  """
+  When the channel was terminated (if applicable)
+  """
   terminatedAt: Date
+  """
+  Whether termination was initiated by indexer
+  """
   terminateByIndexer: Boolean!
+  """
+  Channel creation/start time
+  """
   startTime: Date!
 
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+Disputes tracks dispute cases between network participants.
+Handles slashing mechanisms and dispute resolution processes.
+Manages fisherman reports and runner penalties in the network.
+"""
 type Disputes @entity {
-  id: ID! #disputeId
+  """
+  Unique dispute identifier
+  """
+  id: ID!
+  """
+  Type of dispute being raised
+  """
   disputeType: DisputeType!
+  """
+  Current state of the dispute
+  """
   state: DisputeState!
+  """
+  Whether the dispute has been finalized
+  """
   isFinalized: Boolean!
 
+  """
+  Address of the fisherman who raised the dispute
+  """
   fisherman: String!
+  """
+  Address of the runner being disputed
+  """
   runner: String!
 
+  """
+  Amount to be slashed from the runner
+  """
   slashAmount: BigInt
+  """
+  Amount to be returned if dispute is invalid
+  """
   returnAmount: BigInt
 }
 
+"""
+PriceOracle tracks token price updates from oracle feeds.
+Records price changes for token pairs used in network calculations.
+Maintains historical price data for accurate reward and payment calculations.
+"""
 type PriceOracle @entity {
-  id: ID! #oracleId
+  """
+  Unique oracle identifier
+  """
+  id: ID!
+  """
+  Source token address
+  """
   fromToken: String!
+  """
+  Target token address
+  """
   toToken: String!
+  """
+  Price before the update
+  """
   beforePrice: BigInt!
+  """
+  Price after the update
+  """
   afterPrice: BigInt!
+  """
+  Block number when price update occurred
+  """
   createdBlock: Int
 }
 
@@ -680,352 +1574,1245 @@ enum OrderStatus {
   INACTIVE
 }
 
+"""
+Order represents token swap orders in the network's built-in DEX.
+Tracks SQT token trading pairs and order execution status.
+Manages order lifecycle from creation to completion or cancellation.
+"""
 type Order @entity {
-  id: ID! #orderId
+  """
+  Unique order identifier
+  """
+  id: ID!
+  """
+  Address that created the order
+  """
   sender: String!
+  """
+  Token address to give/sell
+  """
   tokenGive: String!
+  """
+  Token address to get/buy
+  """
   tokenGet: String!
+  """
+  Amount of tokens to give
+  """
   amountGive: BigInt!
+  """
+  Amount of tokens to get
+  """
   amountGet: BigInt!
-  tokenGiveBalance: BigInt! #amount SQT left for swapping
-  status: OrderStatus! # Inactive when cancel order
+  """
+  Remaining balance of tokenGive available for swapping
+  """
+  tokenGiveBalance: BigInt!
+  """
+  Order status (Inactive when cancelled)
+  """
+  status: OrderStatus!
+  """
+  Order creation timestamp
+  """
   createAt: Date!
+  """
+  Last update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+Cache provides simple key-value storage for temporary data.
+Used to store computed values and state information for efficient access.
+Enables caching of frequently accessed or expensive-to-compute data.
+"""
 type Cache @entity {
+  """
+  Cache key identifier
+  """
   id: ID!
+  """
+  Cached value as string
+  """
   value: String!
 }
 
+"""
+DeploymentBooster tracks consumer boost allocations to specific deployments.
+Records individual boost transactions including additions and removals.
+Links consumers to their boosted deployments for reward allocation.
+Note: project field is redundant (can be accessed via deployment.project) but kept for query optimization.
+"""
 type DeploymentBooster @entity {
-  id: ID! # deploymentId:consumer:txHash
+  """
+  Composite ID: deploymentId:consumer:txHash:logIndex
+  """
+  id: ID!
+  """
+  Project being boosted (redundant field for query optimization, accessible via deployment.project)
+  """
   project: Project!
+  """
+  Specific deployment receiving the boost
+  """
   deployment: Deployment!
+  """
+  Consumer providing the boost
+  """
   consumer: String! @index
+  """
+  Amount added in this boost transaction
+  """
   amountAdded: BigInt!
+  """
+  Amount removed in this boost transaction
+  """
   amountRemoved: BigInt!
+  """
+  Era index when boost was applied
+  """
   eraIdx: Int! @index
+  """
+  Transaction creation timestamp
+  """
   createAt: Date!
 }
 
+"""
+DeploymentBoosterSummary aggregates all boost transactions by consumer per deployment.
+Maintains running totals of boost amounts for efficient querying.
+Updated whenever consumer adds or removes boosts from a deployment.
+Note: project field is redundant (can be accessed via deployment.project) but kept for query optimization.
+"""
 type DeploymentBoosterSummary @entity {
-  id: ID! # deploymentId:consumer
+  """
+  Composite ID: deploymentId:consumer
+  """
+  id: ID!
+  """
+  Project being boosted (redundant field for query optimization, accessible via deployment.project)
+  """
   project: Project!
+  """
+  Deployment receiving boosts
+  """
   deployment: Deployment!
+  """
+  Consumer providing boosts
+  """
   consumer: String! @index
+  """
+  Total amount added across all boost transactions
+  """
   totalAdded: BigInt!
+  """
+  Total amount removed across all boost transactions
+  """
   totalRemoved: BigInt!
+  """
+  Current net boost amount (totalAdded - totalRemoved)
+  """
   totalAmount: BigInt!
+  """
+  When first boost was created
+  """
   createAt: Date!
+  """
+  Last boost transaction timestamp
+  """
   updateAt: Date!
 }
 
+"""
+IndexerAllocation tracks indexer stake allocations to specific deployments.
+Records individual allocation transactions including additions and removals.
+Links indexers to their allocated deployments for reward calculation.
+"""
 type IndexerAllocation @entity {
-  id: ID! # deploymentId:indexerId:txHash
+  """
+  Composite ID: deploymentId:indexerId:txHash
+  """
+  id: ID!
+  """
+  Project being allocated to
+  """
   project: Project!
+  """
+  Specific deployment receiving allocation
+  """
   deployment: Deployment!
+  """
+  Indexer making the allocation
+  """
   indexer: Indexer!
+  """
+  Amount added in this allocation transaction
+  """
   amountAdded: BigInt!
+  """
+  Amount removed in this allocation transaction
+  """
   amountRemoved: BigInt!
+  """
+  Era index when allocation was made
+  """
   eraIdx: Int! @index
+  """
+  Transaction creation timestamp
+  """
   createAt: Date!
 }
 
+"""
+IndexerAllocationSummary aggregates all allocation transactions by indexer per deployment.
+Maintains running totals of allocation amounts for efficient querying.
+Updated whenever indexer adds or removes allocations from a deployment.
+Note: project field is redundant (can be accessed via deployment.project) but kept for query optimization.
+"""
 type IndexerAllocationSummary @entity {
-  id: ID! # deploymentId:indexerId
+  """
+  Composite ID: deploymentId:indexerId
+  """
+  id: ID!
+  """
+  Project being allocated to (redundant field for query optimization, accessible via deployment.project)
+  """
   project: Project!
+  """
+  Deployment receiving allocations
+  """
   deployment: Deployment!
+  """
+  Indexer making allocations
+  """
   indexer: Indexer!
+  """
+  Total amount added across all allocation transactions
+  """
   totalAdded: BigInt!
+  """
+  Total amount removed across all allocation transactions
+  """
   totalRemoved: BigInt!
+  """
+  Current net allocation amount (totalAdded - totalRemoved)
+  """
   totalAmount: BigInt!
+  """
+  When first allocation was created
+  """
   createAt: Date!
+  """
+  Last allocation transaction timestamp
+  """
   updateAt: Date!
 }
 
+"""
+IndexerAllocationOverflow tracks periods when indexer allocations exceed their capacity.
+Records overflow duration and era ranges for penalty calculations.
+Used to identify indexers operating beyond their staking limits.
+"""
 type IndexerAllocationOverflow @entity {
-  id: ID! # indexerId:txHash
+  """
+  Composite ID: indexerId:txHash
+  """
+  id: ID!
+  """
+  Indexer experiencing allocation overflow
+  """
   indexer: Indexer!
+  """
+  When overflow period started
+  """
   overflowStart: Date!
+  """
+  When overflow period ended
+  """
   overflowEnd: Date! @index
+  """
+  Duration of overflow in seconds
+  """
   overflowTime: BigInt! @index
+  """
+  Era index when overflow started
+  """
   eraIdxStart: Int! @index
+  """
+  Era index when overflow ended
+  """
   eraIdxEnd: Int! @index
+  """
+  Record creation timestamp
+  """
   createAt: Date!
+  """
+  Last update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+IndexerLatestAllocationOverflow points to the most recent allocation overflow for each indexer.
+Provides quick access to current overflow status without scanning all overflow records.
+Updated whenever a new overflow period starts for an indexer.
+"""
 type IndexerLatestAllocationOverflow @entity {
-  id: ID! # indexerId
+  """
+  Indexer ID
+  """
+  id: ID!
+  """
+  Reference to the latest allocation overflow record
+  """
   overflowId: IndexerAllocationOverflow!
+  """
+  When this reference was created
+  """
   createAt: Date!
+  """
+  When this reference was last updated
+  """
   updateAt: Date!
 }
 
+"""
+IndexerMissedLabor tracks labor requirements missed by indexers for specific deployments.
+Records penalties applied when indexers fail to meet service obligations.
+Used for calculating reduced rewards and performance metrics.
+"""
 type IndexerMissedLabor @entity {
-  id: ID! # deploymentId:indexerId:txHash
+  """
+  Composite ID: deploymentId:indexerId:txHash
+  """
+  id: ID!
+  """
+  Deployment where labor was missed
+  """
   deployment: Deployment!
+  """
+  Indexer who missed the labor requirement
+  """
   indexer: Indexer!
+  """
+  Amount of missed labor/service requirement
+  """
   missedLabor: BigInt!
+  """
+  Era index when labor was missed
+  """
   eraIdx: Int! @index
+  """
+  Record creation timestamp
+  """
   createAt: Date!
 }
 
+"""
+IndexerAllocationReward tracks rewards earned by indexers for their deployment allocations.
+Records both earned rewards and any burnt amounts due to penalties.
+Links indexer performance to specific deployments and eras.
+"""
 type IndexerAllocationReward @entity {
-  id: ID! # deploymentId:indexerId:txHash
+  """
+  Composite ID: deploymentId:indexerId:txHash
+  """
+  id: ID!
+  """
+  Project generating the reward
+  """
   project: Project!
+  """
+  Deployment for which reward was earned
+  """
   deployment: Deployment!
+  """
+  Indexer earning the reward
+  """
   indexer: Indexer!
+  """
+  Reward amount earned
+  """
   reward: BigInt!
+  """
+  Amount burnt due to penalties or slashing
+  """
   burnt: BigInt!
+  """
+  Era index when reward was distributed
+  """
   eraIdx: Int! @index
+  """
+  Reward distribution timestamp
+  """
   createAt: Date!
 }
 
+"""
+IndexerAllocationRewardSummary aggregates all allocation rewards by indexer per deployment.
+Maintains running totals of rewards and burnt amounts for efficient querying.
+Updated whenever indexer receives new allocation rewards or penalties.
+Note: project field is redundant (can be accessed via deployment.project) but kept for query optimization.
+"""
 type IndexerAllocationRewardSummary @entity {
-  id: ID! # deploymentId:indexerId
+  """
+  Composite ID: deploymentId:indexerId
+  """
+  id: ID!
+  """
+  Project generating rewards (redundant field for query optimization, accessible via deployment.project)
+  """
   project: Project!
+  """
+  Deployment for which rewards were earned
+  """
   deployment: Deployment!
+  """
+  Indexer earning rewards
+  """
   indexer: Indexer!
+  """
+  Total rewards earned across all allocation periods
+  """
   totalReward: BigInt!
+  """
+  Total amount burnt across all penalties
+  """
   totalBurnt: BigInt!
+  """
+  When first reward was recorded
+  """
   createAt: Date!
+  """
+  Last reward update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+ConsumerQueryReward tracks spending and refunds for consumer query orders.
+Records individual order transactions including payments and refunds.
+Links consumer spending to specific deployments and order types for reward distribution.
+"""
 type ConsumerQueryReward @entity {
-  id: ID! # deploymentId:consumer:orderType:orderId
+  """
+  Composite ID: deploymentId:consumer:orderType:orderId
+  """
+  id: ID!
+  """
+  Project being queried
+  """
   project: Project!
+  """
+  Deployment handling the queries
+  """
   deployment: Deployment!
+  """
+  Consumer making the queries
+  """
   consumer: String! @index
+  """
+  Type of order (boost, agreement, etc.)
+  """
   orderType: OrderType!
+  """
+  Specific order identifier
+  """
   orderId: String!
+  """
+  Amount spent on queries
+  """
   spent: BigInt!
+  """
+  Amount refunded to consumer
+  """
   refunded: BigInt!
+  """
+  Order creation timestamp
+  """
   createAt: Date!
+  """
+  Last update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+ConsumerQueryRewardSummary aggregates all query spending by consumer per deployment and order type.
+Maintains running totals of spent and refunded amounts for efficient querying.
+Updated whenever consumer makes new query payments or receives refunds.
+Note: project field is redundant (can be accessed via deployment.project) but kept for query optimization.
+"""
 type ConsumerQueryRewardSummary @entity {
-  id: ID! # deploymentId:consumer:orderType
+  """
+  Composite ID: deploymentId:consumer:orderType
+  """
+  id: ID!
+  """
+  Project being queried (redundant field for query optimization, accessible via deployment.project)
+  """
   project: Project!
+  """
+  Deployment handling queries
+  """
   deployment: Deployment!
+  """
+  Consumer making queries
+  """
   consumer: String! @index
+  """
+  Type of orders being summarized
+  """
   orderType: OrderType!
+  """
+  Total amount spent across all orders
+  """
   totalSpent: BigInt!
+  """
+  Total amount refunded across all orders
+  """
   totalRefunded: BigInt!
+  """
+  When first order was created
+  """
   createAt: Date!
+  """
+  Last order update timestamp
+  """
   updateAt: Date!
 }
 
-# Airdrop
 enum AirdropClaimStatus {
   CLAIMED
   UNCLAIMED
 }
 
+"""
+Airdrop represents token distribution rounds to eligible network participants.
+Tracks airdrop campaign details including timing and withdrawal status.
+Manages distribution of SQT tokens to community members and early adopters.
+Note: Uses String timestamps instead of Date for legacy compatibility with airdrop system.
+"""
 type Airdrop @entity {
-  id: ID! # Round ID
+  """
+  Airdrop round identifier
+  """
+  id: ID!
+  """
+  Token contract address for airdrop
+  """
   tokenAddress: String!
+  """
+  When airdrop claims become available
+  """
   startTime: Date!
+  """
+  When airdrop claims expire
+  """
   endTime: Date!
+  """
+  Amount withdrawn by admin (if any)
+  """
   withdrawAmount: BigInt
+  """
+  Whether admin has withdrawn unclaimed tokens
+  """
   hasWithdrawn: Boolean
+  """
+  Airdrop creation timestamp (String format for legacy compatibility)
+  """
   createAt: String
+  """
+  Last update timestamp (String format for legacy compatibility)
+  """
   updateAt: String
 }
 
+"""
+AirdropUser tracks individual user eligibility and claims for specific airdrop rounds.
+Records allocation amounts and claim status for each eligible participant.
+Updated when users claim their allocated tokens.
+"""
 type AirdropUser @entity {
-  id: ID! # roundId:userAccount
+  """
+  Composite ID: roundId:userAccount
+  """
+  id: ID!
+  """
+  User wallet address eligible for airdrop
+  """
   user: String!
+  """
+  Reference to the airdrop round
+  """
   airdrop: Airdrop!
+  """
+  Amount allocated to this user
+  """
   amount: BigInt!
+  """
+  Claim status (CLAIMED or UNCLAIMED)
+  """
   status: AirdropClaimStatus!
+  """
+  When allocation was created (String format for legacy compatibility)
+  """
   createAt: String
+  """
+  When status was last updated (String format for legacy compatibility)
+  """
   updateAt: String
 }
 
+"""
+AirdropAmount aggregates total airdrop allocations and claims per user across all rounds.
+Maintains running totals of all airdrop tokens allocated and claimed by each user.
+Provides summary view of user's complete airdrop participation.
+"""
 type AirdropAmount @entity {
-  id: ID! # userAccount
-  totalAirdropAmount: BigInt! # Claimed + unClaimed + unlocked + locked
-  claimedAmount: BigInt! # claim total
+  """
+  User wallet address
+  """
+  id: ID!
+  """
+  Total airdrop amount across all rounds (claimed + unclaimed + locked + unlocked)
+  """
+  totalAirdropAmount: BigInt!
+  """
+  Total amount claimed by user across all rounds
+  """
+  claimedAmount: BigInt!
+  """
+  When first airdrop allocation was created (String format for legacy compatibility)
+  """
   createAt: String
+  """
+  Last update timestamp (String format for legacy compatibility)
+  """
   updateAt: String
 }
 
+"""
+Withdraw tracks token withdrawal transactions from contracts.
+Records withdrawal events with composite indexing for efficient sender/block queries.
+Separate from delegation withdrawals - handles general contract withdrawals.
+"""
 type Withdraw @entity @compositeIndexes(fields: [["sender", "blockheight"]]) {
-  id: ID! # txHash:logIndex
+  """
+  Composite ID: txHash:logIndex
+  """
+  id: ID!
+  """
+  Transaction hash containing the withdrawal
+  """
   txHash: String!
+  """
+  Address initiating the withdrawal
+  """
   sender: String!
+  """
+  Amount being withdrawn
+  """
   amount: BigInt!
+  """
+  Withdrawal timestamp
+  """
   createAt: Date!
+  """
+  Block height containing the withdrawal
+  """
   blockheight: Int!
 }
 
+"""
+EraIndexerApy tracks indexer and delegator annual percentage yields for each era.
+Calculates APY based on rewards earned relative to staked amounts.
+APY Formula: ((reward * 10^18) / 7 days * 365 days) / stake
+All APY values are scaled by 10^18 and assume 7-day era periods.
+Provides performance metrics for indexer evaluation and delegation decisions.
+"""
 type EraIndexerApy @entity {
-  id: ID! # indexerId:eraId
+  """
+  Composite ID: indexerId:eraId
+  """
+  id: ID!
+  """
+  Era index for this APY calculation
+  """
   eraIdx: Int!
+  """
+  Indexer whose APY is being tracked
+  """
   indexer: Indexer!
+  """
+  Total rewards earned by indexer in this era
+  """
   indexerReward: BigInt!
+  """
+  Annualized percentage yield for indexer (scaled by 10^18, divide by 10^18 for actual percentage)
+  """
   indexerApy: BigInt!
+  """
+  Total rewards distributed to delegators in this era
+  """
   delegatorReward: BigInt!
+  """
+  Annualized percentage yield for delegators (scaled by 10^18, divide by 10^18 for actual percentage)
+  """
   delegatorApy: BigInt!
+  """
+  APY calculation timestamp
+  """
   createAt: Date!
+  """
+  Last update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+IndexerApySummary provides the latest APY summary for each indexer.
+Maintains current APY metrics without historical era details.
+Updated with each new era to reflect most recent performance.
+"""
 type IndexerApySummary @entity {
-  id: ID! # indexerId
+  """
+  Indexer identifier
+  """
+  id: ID!
+  """
+  Latest era index used for APY calculation
+  """
   eraIdx: Int!
+  """
+  Indexer whose APY is summarized
+  """
   indexer: Indexer!
+  """
+  Latest indexer reward amount
+  """
   indexerReward: BigInt!
+  """
+  Current annualized percentage yield for indexer (scaled by 10^18, divide by 10^18 for actual percentage)
+  """
   indexerApy: BigInt!
+  """
+  Latest delegator reward amount
+  """
   delegatorReward: BigInt!
+  """
+  Current annualized percentage yield for delegators (scaled by 10^18, divide by 10^18 for actual percentage)
+  """
   delegatorApy: BigInt!
+  """
+  Summary creation timestamp
+  """
   createAt: Date!
+  """
+  Last APY update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+EraIndexerDeploymentApy tracks indexer APY performance for specific deployments per era.
+Breaks down rewards by type (agreement, flex plan, allocation) for detailed analysis.
+Includes detailed APY calculation metadata with stake allocation tracking for precise yield calculation.
+The apyCalc* fields track allocation changes during the era to compute time-weighted average stake.
+APY values are scaled by 10^18 like other APY entities.
+"""
 type EraIndexerDeploymentApy @entity {
-  id: ID! # indexerId:deploymentId:eraId
+  """
+  Composite ID: indexerId:deploymentId:eraId
+  """
+  id: ID!
+  """
+  Era index for this APY calculation
+  """
   eraIdx: Int!
+  """
+  Indexer earning rewards
+  """
   indexer: Indexer!
+  """
+  Deployment generating rewards
+  """
   deployment: Deployment!
+  """
+  Rewards from service agreements
+  """
   agreementReward: BigInt!
+  """
+  Rewards from flexible plan services
+  """
   flexPlanReward: BigInt!
+  """
+  Rewards from stake allocation
+  """
   allocationReward: BigInt!
+  """
+  Calculated annualized percentage yield (scaled by 10^18, divide by 10^18 for actual percentage)
+  """
   apy: BigInt!
+  """
+  Base allocation amount used for APY calculation (current stake amount)
+  """
   apyCalcAllocation: BigInt!
+  """
+  Allocation amount removed during this era (for precise APY calculation)
+  """
   apyCalcRemoval: BigInt!
+  """
+  Allocation amount added during this era (for precise APY calculation)
+  """
   apyCalcAdded: BigInt!
+  """
+  Timestamp when allocation was recorded for APY calculation reference
+  """
   apyCalcAllocationRecordAt: Date!
+  """
+  JSON string containing detailed APY calculation history and intermediate values
+  """
   apyCalcHistory: String!
+  """
+  APY record creation timestamp
+  """
   createAt: Date!
+  """
+  Last update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+EraDelegatorIndexerApy tracks APY earned by delegators from specific indexers per era.
+Calculates delegator returns based on rewards received relative to delegated stake.
+Provides performance metrics for delegation strategy evaluation.
+"""
 type EraDelegatorIndexerApy @entity {
-  id: ID! # delegatorId:indexerId:eraId
+  """
+  Composite ID: delegatorId:indexerId:eraId
+  """
+  id: ID!
+  """
+  Era index for this APY calculation
+  """
   eraIdx: Int!
+  """
+  Delegator earning rewards
+  """
   delegator: Delegator!
+  """
+  Indexer receiving delegation
+  """
   indexer: Indexer!
+  """
+  Reward amount earned by delegator
+  """
   reward: BigInt!
+  """
+  Stake amount delegated to indexer
+  """
   stake: BigInt!
+  """
+  Annualized percentage yield for this delegation (scaled by 10^18, divide by 10^18 for actual percentage)
+  """
   apy: BigInt!
+  """
+  APY record creation timestamp
+  """
   createAt: Date!
+  """
+  Last update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+EraDelegatorApy tracks overall APY earned by delegators across all their delegations per era.
+Aggregates rewards from all indexers delegated to for total delegator performance.
+Provides comprehensive delegator yield metrics.
+"""
 type EraDelegatorApy @entity {
-  id: ID! # delegatorId:eraId
+  """
+  Composite ID: delegatorId:eraId
+  """
+  id: ID!
+  """
+  Era index for this APY calculation
+  """
   eraIdx: Int!
+  """
+  Delegator earning rewards
+  """
   delegator: Delegator!
+  """
+  Total rewards earned across all delegations
+  """
   reward: BigInt!
+  """
+  Overall annualized percentage yield (scaled by 10^18, divide by 10^18 for actual percentage)
+  """
   apy: BigInt!
+  """
+  APY record creation timestamp
+  """
   createAt: Date!
+  """
+  Last update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+IndexerStakeWeight tracks the relative weight of indexer stakes for reward distribution.
+Determines indexer's share of era rewards based on their total stake relative to network.
+Updated each era for accurate reward calculations.
+"""
 type IndexerStakeWeight @entity {
-  id: ID! # indexerId
+  """
+  Indexer identifier
+  """
+  id: ID!
+  """
+  Indexer whose stake weight is tracked
+  """
   indexer: Indexer!
+  """
+  Era index for this weight calculation
+  """
   eraIdx: Int!
+  """
+  Calculated stake weight for reward distribution
+  """
   weight: BigInt!
+  """
+  Weight calculation timestamp
+  """
   createAt: Date!
+  """
+  Last update timestamp
+  """
   updateAt: Date!
 }
 
+"""
+EraDeploymentRewards aggregates all reward types earned by a deployment in a specific era.
+Breaks down rewards by source: allocation, query, agreement, and state channel rewards.
+Tracks change history for debugging multi-source updates.
+"""
 type EraDeploymentRewards @entity {
-  id: ID! # deploymentId:eraId
+  """
+  Composite ID: deploymentId:eraId
+  """
+  id: ID!
+  """
+  Deployment identifier earning rewards
+  """
   deploymentId: String!
+  """
+  Era index for reward calculation
+  """
   eraIdx: Int!
+  """
+  Total rewards earned across all sources
+  """
   totalRewards: BigInt!
+  """
+  Rewards from indexer stake allocations
+  """
   allocationRewards: BigInt!
+  """
+  Rewards from consumer query payments
+  """
   queryRewards: BigInt!
+  """
+  Rewards from service agreements
+  """
   agreementRewards: BigInt!
+  """
+  Rewards from state channel settlements
+  """
   stateChannelRewards: BigInt!
-  # this record may override by multiple data source, so save the changes height to debug.
-  changesHeight: String # xxx:event,xxx:event,xxx
+  """
+  Change history for debugging multi-source updates (format: xxx:event,xxx:event)
+  """
+  changesHeight: String
 }
 
+"""
+IndexerEraDeploymentRewards tracks rewards earned by specific indexers for specific deployments per era.
+Breaks down indexer rewards by source type for detailed performance analysis.
+Tracks change history for debugging multi-source updates.
+"""
 type IndexerEraDeploymentRewards @entity {
-  id: ID! # indexerId:deploymentId:eraId
+  """
+  Composite ID: indexerId:deploymentId:eraId
+  """
+  id: ID!
+  """
+  Indexer earning the rewards
+  """
   indexer: Indexer!
+  """
+  Deployment generating the rewards
+  """
   deploymentId: String!
+  """
+  Era index for reward calculation
+  """
   eraIdx: Int!
+  """
+  Total rewards earned by this indexer for this deployment
+  """
   totalRewards: BigInt!
+  """
+  Rewards from stake allocation to this deployment
+  """
   allocationRewards: BigInt!
+  """
+  Rewards from serving queries for this deployment
+  """
   queryRewards: BigInt!
+  """
+  Rewards from service agreements for this deployment
+  """
   agreementRewards: BigInt!
+  """
+  Rewards from state channel settlements for this deployment
+  """
   stateChannelRewards: BigInt!
-  # this record may override by multiple data source, so save the changes height to debug.
-  changesHeight: String # xxx:event,xxx:event,xxx
+  """
+  Change history for debugging multi-source updates (format: xxx:event,xxx:event)
+  """
+  changesHeight: String
 }
 
+"""
+IndexerLaborHistory tracks the labor/work performed by indexers for deployments per era.
+Records the amount of work completed for performance tracking and reward calculations.
+Provides historical view of indexer activity and service delivery.
+"""
 type IndexerLaborHistory @entity {
-  id: ID! # indexerId:DeploymentId:eraId
+  """
+  Composite ID: indexerId:deploymentId:eraId
+  """
+  id: ID!
+  """
+  Indexer performing the labor
+  """
   indexer: Indexer!
+  """
+  Deployment for which labor was performed
+  """
   deploymentId: String!
+  """
+  Era index when labor was performed
+  """
   eraIdx: Int!
+  """
+  Amount of labor/work performed
+  """
   amount: BigInt!
+  """
+  Labor record creation timestamp
+  """
   createAt: Date!
 }
 
+"""
+ConsumerQuerySpent tracks incremental spending by consumers on query services.
+Records each spending transaction with accumulating totals for billing tracking.
+Links spending to specific indexers, deployments, and order types.
+"""
 type ConsumerQuerySpent @entity {
-  id: ID! # transaction hash
+  """
+  Transaction hash identifier
+  """
+  id: ID!
+  """
+  Consumer making the payment
+  """
   consumer: String!
+  """
+  Indexer providing the service
+  """
   indexer: Indexer!
+  """
+  Deployment being queried
+  """
   deploymentId: String!
+  """
+  Era index when spending occurred
+  """
   eraIdx: Int!
-  orderType: OrderType! # StateChannel or Agreement
-  orderId: String! # StateChannel ID or Agreement ID
-  spend: BigInt! # Increment spent
-  curAmount: BigInt! # Current accumulated spent
+  """
+  Order type (StateChannel or Agreement)
+  """
+  orderType: OrderType!
+  """
+  Order identifier (StateChannel ID or Agreement ID)
+  """
+  orderId: String!
+  """
+  Incremental amount spent in this transaction
+  """
+  spend: BigInt!
+  """
+  Current accumulated total spent
+  """
+  curAmount: BigInt!
+  """
+  Spending transaction timestamp
+  """
   createAt: Date!
-  changesHeight: String # xxx:event,xxx:event,xxx
+  """
+  Change history for debugging (format: xxx:event,xxx:event)
+  """
+  changesHeight: String
 }
 
+"""
+OrderSpent tracks total accumulated spending for specific orders.
+Maintains latest spending totals for StateChannels and ServiceAgreements.
+Provides quick access to order spending without scanning all transactions.
+"""
 type OrderSpent @entity {
-  id: ID! # StateChannel ID or Agreement ID
-  amount: BigInt! # latest accumulated spent
+  """
+  Order identifier (StateChannel ID or Agreement ID)
+  """
+  id: ID!
+  """
+  Latest accumulated amount spent on this order
+  """
+  amount: BigInt!
+  """
+  When spending tracking was created
+  """
   createAt: Date!
+  """
+  Last spending update timestamp
+  """
   updateAt: Date!
+  """
+  Era index when spending tracking was created
+  """
   createdAtEraIdx: Int
+  """
+  Era index when last updated
+  """
   updateAtEraIdx: Int
 }
 
-# Project voting related entities
 enum VoteActivityType {
   VOTE
   WITHDRAW
 }
 
+"""
+ProjectVote tracks user voting participation and balances for subnet projects.
+Maintains running totals of votes cast and withdrawn for each user per project.
+Supports subnet governance through token-based voting mechanism.
+Note: projectId is for subnet projects, NOT related to the Project entity in this schema.
+"""
 type ProjectVote @entity {
-  id: ID! # user_address:project_id
+  """
+  Composite ID: user_address:project_id
+  """
+  id: ID!
+  """
+  User wallet address participating in voting
+  """
   user: String! @index
-  projectId: String! @index # bytes32 project ID from the vote (external ID)
-  totalVoted: BigInt! # Current total amount voted by this user for this project
-  totalWithdrawn: BigInt! # Total amount withdrawn by this user from this project
-  currentBalance: BigInt! # totalVoted - totalWithdrawn
+  """
+  Subnet project identifier (bytes32 external ID, NOT related to Project entity)
+  """
+  projectId: String! @index
+  """
+  Total amount voted by this user for this project
+  """
+  totalVoted: BigInt!
+  """
+  Total amount withdrawn by this user from this project
+  """
+  totalWithdrawn: BigInt!
+  """
+  Current voting balance (totalVoted - totalWithdrawn)
+  """
+  currentBalance: BigInt!
+  """
+  When user first voted for this project
+  """
   firstVotedAt: Date!
+  """
+  When user last voted for this project
+  """
   lastVotedAt: Date!
+  """
+  When user last withdrew votes from this project
+  """
   lastWithdrawnAt: Date
 
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
 
+"""
+ProjectVoteActivity records individual voting and withdrawal activities.
+Tracks all vote-related transactions for audit trail and historical analysis.
+Provides detailed activity log for subnet project governance.
+Note: projectId is for subnet projects, NOT related to the Project entity in this schema.
+"""
 type ProjectVoteActivity @entity {
-  id: ID! # transaction_hash:log_index
+  """
+  Composite ID: transaction_hash:log_index
+  """
+  id: ID!
+  """
+  User performing the voting activity
+  """
   user: String! @index
-  projectId: String! @index # bytes32 project ID (external ID)
+  """
+  Subnet project identifier (bytes32 external ID, NOT related to Project entity)
+  """
+  projectId: String! @index
+  """
+  Type of activity (VOTE or WITHDRAW)
+  """
   activityType: VoteActivityType!
+  """
+  Amount of tokens involved in the activity
+  """
   amount: BigInt!
+  """
+  When the activity occurred
+  """
   timestamp: Date!
+  """
+  Block height of the activity
+  """
   blockHeight: Int!
+  """
+  Transaction hash containing the activity
+  """
   transactionHash: String!
 
+  """
+  Block number when activity was created
+  """
+  """
+  Block number when record was created
+  """
   createdBlock: Int
-  lastEvent: String #topicHandler:blockNumber
+  """
+  Latest event details: topicHandler:blockNumber
+  """
+  lastEvent: String
 }
