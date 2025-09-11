@@ -50,7 +50,6 @@ enum DisputeState {
 
 """
 Project entity represents SubQuery projects in the network.
-Supports 5-round reward distribution: by project type -> consumer boost allocation -> operator+delegator -> commission -> stake-proportional distribution.
 Each project can have multiple deployment versions and dynamic type weighting configuration.
 """
 type Project @entity {
@@ -192,7 +191,7 @@ type IndexerDeployment @entity {
 """
 Era represents time periods for reward distribution cycles in the network.
 Era duration is operator-triggered with minimum seconds configuration, may have delays.
-Most reward distributions are triggered after era transitions. 
+Most reward distributions are triggered after era transitions.
 eraPeriod stores duration in milliseconds format (seconds * 1000).
 """
 type Era @entity {
@@ -1151,7 +1150,7 @@ type EraStakeUpdate @entity {
 
 """
 Sqtoken tracks SQT token supply statistics and holder relationships.
-Maintains both total supply (all minted tokens) and circulating supply 
+Maintains both total supply (all minted tokens) and circulating supply
 (excluding tokens held by reserved contracts like treasury and airdropper).
 Updated in real-time through L2SQToken Transfer event monitoring.
 """
