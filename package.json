@@ -4,10 +4,10 @@
   "description": "Subql project for indexing the Subquery Network",
   "main": "dist/index.js",
   "scripts": {
-    "build:mainnet": "yarn check-filters mainnet && ./node_modules/.bin/subql build",
-    "build:testnet": "yarn check-filters testnet && ./node_modules/.bin/subql build",
     "codegen:mainnet": "./node_modules/.bin/subql codegen -f ./project-mainnet.yaml",
     "codegen:testnet": "./node_modules/.bin/subql codegen -f ./project-testnet.yaml",
+    "build:mainnet": "yarn check-filters mainnet && ./node_modules/.bin/subql build",
+    "build:testnet": "yarn check-filters testnet && ./node_modules/.bin/subql build",
     "deploy:mainnet": "./node_modules/.bin/subql publish -f ./project-mainnet.yaml",
     "deploy:testnet": "./node_modules/.bin/subql publish -f ./project-testnet.yaml",
     "validate": "./node_modules/.bin/subql validate",
