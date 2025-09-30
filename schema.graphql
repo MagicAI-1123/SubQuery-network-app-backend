@@ -1153,6 +1153,12 @@ Sqtoken tracks SQT token supply statistics and holder relationships.
 Maintains both total supply (all minted tokens) and circulating supply
 (excluding tokens held by reserved contracts like treasury and airdropper).
 Updated in real-time through L2SQToken Transfer event monitoring.
+
+Represents a SubQuery Token (SQT) staking position or delegation entry.
+All token values are denominated in $SQT unless otherwise specified.
+
+This type contains information about staked tokens, rewards, and delegation status
+within the SubQuery Network staking system.
 """
 type Sqtoken @entity {
   """
