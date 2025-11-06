@@ -182,7 +182,7 @@ export async function addOrUpdateConsumerQuerySpent(
     id: transactionHash,
     consumer,
     indexerId: runner,
-    deploymentId: bytesToIpfsCid(deploymentId),
+    deploymentId,
     orderType,
     orderId,
     spend: increment,
