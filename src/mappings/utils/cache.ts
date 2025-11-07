@@ -36,6 +36,7 @@ export enum CacheKey {
   BoosterQueryRewardRateSqDict = 'boosterQueryRewardRateSqDict',
   BoosterQueryRewardRateSubgraph = 'boosterQueryRewardRateSubgraph',
   BoosterQueryRewardRateLlm = 'boosterQueryRewardRateLlm',
+  InstantDelegationQuota = 'instantDelegationQuota',
 }
 
 export const CacheKeyToParamType = {
@@ -72,6 +73,7 @@ export const CacheKeyToParamType = {
   [CacheKey.BoosterQueryRewardRateSqDict]: 'uint256',
   [CacheKey.BoosterQueryRewardRateSubgraph]: 'uint256',
   [CacheKey.BoosterQueryRewardRateLlm]: 'uint256',
+  [CacheKey.InstantDelegationQuota]: 'uint256',
 };
 
 export async function cacheSet(key: CacheKey, value: string) {
