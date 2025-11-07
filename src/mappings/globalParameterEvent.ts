@@ -65,7 +65,63 @@ async function boostQueryRewardRateHandler(value: string) {
 }
 
 async function defaultHandler(name: CacheKey, value: string) {
-  const paramType = CacheKeyToParamType[name] || 'string';
+  let paramType = CacheKeyToParamType[name];
+
+  // If parameter type is not defined, use smart decoding
+  if (!paramType) {
+    logger.warn(
+      `Parameter type not defined for "${name}". Please add it to CacheKeyToParamType in cache.ts`
+    );
+
+    // Attempt smart decoding
+    const valueLength = value.length;
+
+    // For 32-byte data (0x + 64 chars = 66 chars), try uint256 first (most common blockchain parameter)
+    if (valueLength === 66) {
+      const tryTypes = ['uint256', 'address', 'bool'];
+
+      for (const type of tryTypes) {
+        try {
+          const testValue = defaultAbiCoder.decode([type], value)[0];
+          logger.warn(
+            `Successfully decoded "${name}" as ${type}: ${
+              testValue.toString ? testValue.toString() : testValue
+            }`
+          );
+          paramType = type;
+          break;
+        } catch (error) {
+          // Continue trying next type
+        }
+      }
+    } else {
+      // For dynamic types: try bytes first, then string
+      const tryTypes = ['bytes', 'string'];
+
+      for (const type of tryTypes) {
+        try {
+          const testValue = defaultAbiCoder.decode([type], value)[0];
+          logger.warn(
+            `Successfully decoded "${name}" as ${type}: ${
+              testValue.toString ? testValue.toString() : testValue
+            }`
+          );
+          paramType = type;
+          break;
+        } catch (error) {
+          // Continue trying next type
+        }
+      }
+    }
+
+    // If all types fail, throw an error
+    if (!paramType) {
+      throw new Error(
+        `Unable to decode parameter "${name}". Please add the correct type to CacheKeyToParamType.`
+      );
+    }
+  }
+
   const cacheValue = defaultAbiCoder.decode([paramType], value)[0];
   await cacheSet(name, cacheValue.toString());
 }
