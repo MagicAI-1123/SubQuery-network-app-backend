@@ -152,7 +152,7 @@ export async function reportException(
 
   await exception.save();
 
-  assert(false, `${id}: Error at ${handler}: ${error});`);
+  logger.error(`${id}: Error at ${handler}: ${error}`);
 }
 
 export const toBigNumber = (amount: BigNumberish): BigNumber =>

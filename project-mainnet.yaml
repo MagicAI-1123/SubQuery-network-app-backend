@@ -16,6 +16,8 @@ schema:
   file: ./schema.graphql
 network:
   chainId: '8453' # base
+  endpoint:
+    - 'https://base-mainnet.g.alchemy.com/v2/LvnVgc7AAZUNkbEyRESZV06gD07yZBmd'
   dictionary: ''
 x-ethereum: &ethereum
   kind: ethereum/Runtime
@@ -304,7 +306,7 @@ dataSources:
           kind: ethereum/LogHandler
           filter:
             topics:
-              - AgreementRewards(address indexed runner, uint256 agreementId, uint256 token);
+              - AgreementRewards(address indexed runner, uint256 agreementId, uint256 token)
         - handler: handleParameterEvent
           kind: ethereum/LogHandler
           filter:
@@ -443,7 +445,7 @@ dataSources:
           kind: ethereum/LogHandler
           filter:
             topics:
-              - PricePosted(address assetFrom, address assetTo, uint256 previousPrice, uint256 newPrice);
+              - PricePosted(address assetFrom, address assetTo, uint256 previousPrice, uint256 newPrice)
         - handler: handleParameterEvent
           kind: ethereum/LogHandler
           filter:

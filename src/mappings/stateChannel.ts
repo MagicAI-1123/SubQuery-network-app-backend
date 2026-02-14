@@ -90,7 +90,12 @@ export async function handleChannelExtend(
 
   const { channelId, expiredAt, price } = event.args;
   const sc = await StateChannel.get(channelId.toHexString());
-  assert(sc, `Expected StateChannel (${channelId.toHexString()}) to exist`);
+  if (!sc) {
+    logger.warn(
+      `handleChannelExtend: Expected StateChannel (${channelId.toHexString()}) to exist`
+    );
+    return;
+  }
   sc.expiredAt = new Date(expiredAt.toNumber() * 1000);
   sc.price = price.toBigInt();
   sc.lastEvent = `handleChannelExtend:${event.blockNumber}`;
@@ -105,7 +110,12 @@ export async function handleChannelFund(
 
   const { channelId, total, realTotal } = event.args;
   const sc = await StateChannel.get(channelId.toHexString());
-  assert(sc, `Expected StateChannel (${channelId.toHexString()}) to exist`);
+  if (!sc) {
+    logger.warn(
+      `handleChannelFund: Expected StateChannel (${channelId.toHexString()}) to exist`
+    );
+    return;
+  }
   sc.total = total.toBigInt();
   sc.realTotal = realTotal.toBigInt();
   await sc.save();
@@ -119,16 +129,31 @@ export async function handleChannelCheckpoint(
 
   const { channelId, spent, isFinal } = event.args;
   const sc = await StateChannel.get(channelId.toHexString());
-  assert(sc, `Expected StateChannel (${channelId.toHexString()}) to exist`);
+  if (!sc) {
+    logger.warn(
+      `handleChannelCheckpoint: Expected StateChannel (${channelId.toHexString()}) to exist`
+    );
+    return;
+  }
   const diff = spent.toBigInt() - sc.spent;
   sc.spent = spent.toBigInt();
   sc.isFinal = isFinal;
   await sc.save();
   if (diff > 0) {
     const deployment = await Deployment.get(sc.deploymentId);
-    assert(deployment, `deployment ${sc.deploymentId} not found`);
+    if (!deployment) {
+      logger.warn(
+        `handleChannelCheckpoint: deployment ${sc.deploymentId} not found`
+      );
+      return;
+    }
     const project = await Project.get(deployment.projectId);
-    assert(project, `project ${deployment.projectId} not found`);
+    if (!project) {
+      logger.warn(
+        `handleChannelCheckpoint: project ${deployment.projectId} not found`
+      );
+      return;
+    }
     project.totalReward += diff;
     await project.save();
 
@@ -152,7 +177,12 @@ export async function handleChannelTerminate(
 
   const { channelId, spent, terminatedAt, terminateByIndexer } = event.args;
   const sc = await StateChannel.get(channelId.toHexString());
-  assert(sc, `Expected StateChannel (${channelId.toHexString()}) to exist`);
+  if (!sc) {
+    logger.warn(
+      `handleChannelTerminate: Expected StateChannel (${channelId.toHexString()}) to exist`
+    );
+    return;
+  }
 
   sc.terminatedAt = new Date(terminatedAt.toNumber() * 1000);
   sc.terminateByIndexer = terminateByIndexer;
@@ -168,9 +198,19 @@ export async function handleChannelTerminate(
   await sc.save();
   if (diff > 0) {
     const deployment = await Deployment.get(sc.deploymentId);
-    assert(deployment, `deployment ${sc.deploymentId} not found`);
+    if (!deployment) {
+      logger.warn(
+        `handleChannelTerminate: deployment ${sc.deploymentId} not found`
+      );
+      return;
+    }
     const project = await Project.get(deployment.projectId);
-    assert(project, `project ${deployment.projectId} not found`);
+    if (!project) {
+      logger.warn(
+        `handleChannelTerminate: project ${deployment.projectId} not found`
+      );
+      return;
+    }
     project.totalReward += diff;
     await project.save();
   }
@@ -184,16 +224,31 @@ export async function handleChannelFinalize(
 
   const { channelId, total, remain } = event.args;
   const sc = await StateChannel.get(channelId.toHexString());
-  assert(sc, `Expected StateChannel (${channelId.toHexString()}) to exist`);
+  if (!sc) {
+    logger.warn(
+      `handleChannelFinalize: Expected StateChannel (${channelId.toHexString()}) to exist`
+    );
+    return;
+  }
   sc.status = ChannelStatus.FINALIZED;
   const diff = total.toBigInt() - remain.toBigInt() - sc.spent;
   sc.spent = total.toBigInt() - remain.toBigInt();
   await sc.save();
   if (diff > 0) {
     const deployment = await Deployment.get(sc.deploymentId);
-    assert(deployment, `deployment ${sc.deploymentId} not found`);
+    if (!deployment) {
+      logger.warn(
+        `handleChannelFinalize: deployment ${sc.deploymentId} not found`
+      );
+      return;
+    }
     const project = await Project.get(deployment.projectId);
-    assert(project, `project ${deployment.projectId} not found`);
+    if (!project) {
+      logger.warn(
+        `handleChannelFinalize: project ${deployment.projectId} not found`
+      );
+      return;
+    }
     project.totalReward += diff;
     await project.save();
   }
@@ -219,7 +274,12 @@ export async function handlerChannelLabor2(
 
   // consumer spent
   const sc = await StateChannel.get(channelId.toHexString());
-  assert(sc, `StateChannel not exist ${channelId.toHexString()}`);
+  if (!sc) {
+    logger.warn(
+      `handlerChannelLabor2: StateChannel not exist ${channelId.toHexString()}`
+    );
+    return;
+  }
   await addOrUpdateConsumerQuerySpent(
     event.transactionHash,
     sc.consumer,

@@ -18,7 +18,7 @@ services:
       retries: 5
 
   subquery-node:
-    image: subquerynetwork/subql-node-ethereum:v5.2.0
+    image: subquerynetwork/subql-node-ethereum:v5.6.0
     depends_on:
       'postgres':
         condition: service_healthy
@@ -34,11 +34,14 @@ services:
     command:
       - -f=/app/project-mainnet.yaml
       - --db-schema=app
+      - --batch-size=30
+      - --log-level=warn
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://subquery-node:3000/ready']
-      interval: 3s
-      timeout: 5s
-      retries: 10
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
 
   graphql-engine:
     image: subquerynetwork/subql-query:v2.13.1
