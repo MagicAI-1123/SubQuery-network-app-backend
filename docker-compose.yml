@@ -11,6 +11,20 @@ services:
       - .data/postgres:/var/lib/postgresql/data
     environment:
       POSTGRES_PASSWORD: postgres
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=8GB
+      - -c
+      - wal_buffers=64MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - synchronous_commit=off
+      - -c
+      - max_wal_size=4GB
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
@@ -34,7 +48,10 @@ services:
     command:
       - -f=/app/project-mainnet.yaml
       - --db-schema=app
-      - --batch-size=30
+      - --batch-size=100
+      - --store-cache-threshold=500
+      - --store-cache-async
+      - --scale-batch-size
       - --log-level=warn
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://subquery-node:3000/ready']
